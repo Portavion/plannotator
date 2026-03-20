@@ -110,6 +110,11 @@ const ReviewApp: React.FC = () => {
   const [showApproveWarning, setShowApproveWarning] = useState(false);
   const [sharingEnabled, setSharingEnabled] = useState(true);
   const [repoInfo, setRepoInfo] = useState<{ display: string; branch?: string } | null>(null);
+
+  useEffect(() => {
+    document.title = repoInfo ? `${repoInfo.display} · Code Review` : "Code Review";
+  }, [repoInfo]);
+
   const [prMetadata, setPrMetadata] = useState<PRMetadata | null>(null);
 
   const identity = useMemo(() => getIdentity(), []);
