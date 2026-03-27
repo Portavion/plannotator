@@ -54,6 +54,8 @@ import {
 	submitPRReview,
 } from "./pr.js";
 import { getRepoInfo } from "./project.js";
+import { openEditorFile } from "./ide.js";
+import { resolve } from "node:path";
 
 export interface ReviewServerResult {
 	port: number;
@@ -70,7 +72,7 @@ export interface ReviewServerResult {
 }
 
 function injectLifecycleScript(htmlContent: string): string {
-	return `${htmlContent}\n<script>(function(){\n  let submitted = false;\n  const originalFetch = window.fetch.bind(window);\n  window.fetch = function(input, init) {\n    const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);\n    if (url.includes('/api/feedback')) submitted = true;\n    return originalFetch(input, init);\n  };\n  const notifyClose = function() {\n    if (submitted) return;\n    navigator.sendBeacon('/api/close');\n  };\n  window.addEventListener('pagehide', notifyClose);\n  document.addEventListener('visibilitychange', function() {\n    if (document.visibilityState === 'hidden') notifyClose();\n  });\n})();</script>`;
+	return `${htmlContent}\n<script>(function(){\n  let submitted = false;\n  const originalFetch = window.fetch.bind(window);\n  window.fetch = function(input, init) {\n    const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);\n    if (url.includes('/api/feedback')) submitted = true;\n    return originalFetch(input, init);\n  };\n  const notifyClose = function() {\n    if (submitted) return;\n    navigator.sendBeacon('/api/close');\n  };\n  window.addEventListener('pagehide', notifyClose);\n})();</script>`;
 }
 
 const reviewRuntime: ReviewGitRuntime = {
@@ -480,6 +482,41 @@ export async function startReviewServer(options: {
 				defaultCwd,
 			);
 			json(res, result);
+		} else if (url.pathname === "/api/file/open" && req.method === "POST") {
+			try {
+				const body = await parseBody(req);
+				const filePath = body.filePath as string | undefined;
+				if (!filePath) {
+					json(res, { error: "Missing filePath" }, 400);
+					return;
+				}
+				try {
+					validateFilePath(filePath);
+				} catch {
+					json(res, { error: "Invalid path" }, 400);
+					return;
+				}
+				let cwd: string | undefined;
+				if (currentDiffType.startsWith("worktree:")) {
+					const parsed = parseWorktreeDiffType(currentDiffType);
+					if (parsed) cwd = parsed.path;
+				}
+				if (!cwd) {
+					cwd = options.gitContext?.cwd ?? process.cwd();
+				}
+				const result = await openEditorFile(resolve(cwd, filePath));
+				if ("error" in result) {
+					json(res, { error: result.error }, 500);
+					return;
+				}
+				json(res, { ok: true });
+			} catch (err) {
+				json(
+					res,
+					{ error: err instanceof Error ? err.message : "Failed to open file" },
+					500,
+				);
+			}
 		} else if (url.pathname === "/api/config" && req.method === "POST") {
 			try {
 				const body = (await parseBody(req)) as { displayName?: string };

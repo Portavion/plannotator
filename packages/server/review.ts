@@ -19,6 +19,8 @@ import { saveConfig, detectGitUser, getServerConfig } from "./config";
 import { type PRMetadata, type PRReviewFileComment, fetchPRFileContent, fetchPRContext, submitPRReview, fetchPRViewedFiles, markPRFilesViewed, getPRUser, prRefFromMetadata, getDisplayRepo, getMRLabel, getMRNumberLabel } from "./pr";
 import { createAIEndpoints, ProviderRegistry, SessionManager, createProvider, type AIEndpoints, type PiSDKConfig } from "@plannotator/ai";
 import { isWSL } from "./browser";
+import { openEditorFile } from "./ide";
+import { resolve } from "node:path";
 
 // Re-export utilities
 export { isRemoteSession, getServerPort } from "./remote";
@@ -82,7 +84,7 @@ const MAX_RETRIES = 5;
 const RETRY_DELAY_MS = 500;
 
 function injectLifecycleScript(htmlContent: string): string {
-  return `${htmlContent}\n<script>(function(){\n  let submitted = false;\n  const originalFetch = window.fetch.bind(window);\n  window.fetch = function(input, init) {\n    const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);\n    if (url.includes('/api/feedback')) submitted = true;\n    return originalFetch(input, init);\n  };\n  const notifyClose = function() {\n    if (submitted) return;\n    navigator.sendBeacon('/api/close');\n  };\n  window.addEventListener('pagehide', notifyClose);\n  document.addEventListener('visibilitychange', function() {\n    if (document.visibilityState === 'hidden') notifyClose();\n  });\n})();</script>`;
+  return `${htmlContent}\n<script>(function(){\n  let submitted = false;\n  const originalFetch = window.fetch.bind(window);\n  window.fetch = function(input, init) {\n    const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);\n    if (url.includes('/api/feedback')) submitted = true;\n    return originalFetch(input, init);\n  };\n  const notifyClose = function() {\n    if (submitted) return;\n    navigator.sendBeacon('/api/close');\n  };\n  window.addEventListener('pagehide', notifyClose);\n})();</script>`;
 }
 
 /**
@@ -384,6 +386,41 @@ export async function startReviewServer(
               defaultCwd,
             );
             return Response.json(result);
+          }
+
+          // API: Open the current file in the local editor
+          if (url.pathname === "/api/file/open" && req.method === "POST") {
+            try {
+              const body = (await req.json()) as { filePath: string };
+              if (!body.filePath) {
+                return Response.json({ error: "Missing filePath" }, { status: 400 });
+              }
+
+              try {
+                validateFilePath(body.filePath);
+              } catch {
+                return Response.json({ error: "Invalid path" }, { status: 400 });
+              }
+
+              let cwd: string | undefined;
+              if (currentDiffType.startsWith("worktree:")) {
+                const parsed = parseWorktreeDiffType(currentDiffType);
+                if (parsed) cwd = parsed.path;
+              }
+              if (!cwd) {
+                cwd = gitContext?.cwd ?? process.cwd();
+              }
+
+              const result = await openEditorFile(resolve(cwd, body.filePath));
+              if ("error" in result) {
+                return Response.json({ error: result.error }, { status: 500 });
+              }
+
+              return Response.json({ ok: true });
+            } catch (err) {
+              const message = err instanceof Error ? err.message : "Failed to open file";
+              return Response.json({ error: message }, { status: 500 });
+            }
           }
 
           // API: Git add / reset (stage / unstage) a file (disabled in PR mode)
