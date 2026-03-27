@@ -59,6 +59,8 @@ export interface AnnotateServerResult {
   url: string;
   /** Whether running in remote mode */
   isRemote: boolean;
+  /** Close the annotation session without feedback */
+  close: () => void;
   /** Wait for user feedback submission */
   waitForDecision: () => Promise<{
     feedback: string;
@@ -72,6 +74,10 @@ export interface AnnotateServerResult {
 
 const MAX_RETRIES = 5;
 const RETRY_DELAY_MS = 500;
+
+function injectLifecycleScript(htmlContent: string): string {
+  return `${htmlContent}\n<script>(function(){\n  let submitted = false;\n  const originalFetch = window.fetch.bind(window);\n  window.fetch = function(input, init) {\n    const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);\n    if (url.includes('/api/feedback')) submitted = true;\n    return originalFetch(input, init);\n  };\n  const notifyClose = function() {\n    if (submitted) return;\n    navigator.sendBeacon('/api/close');\n  };\n  window.addEventListener('pagehide', notifyClose);\n  document.addEventListener('visibilitychange', function() {\n    if (document.visibilityState === 'hidden') notifyClose();\n  });\n})();</script>`;
+}
 
 /**
  * Start the Annotate server
@@ -108,6 +114,15 @@ export async function startAnnotateServer(
   const repoInfo = await getRepoInfo();
 
   // Decision promise
+  let decisionResolved = false;
+  const closeSession = () => {
+    if (decisionResolved) return;
+    deleteDraft(draftKey);
+    resolveDecision({
+      feedback: "",
+      annotations: [],
+    });
+  };
   let resolveDecision: (result: {
     feedback: string;
     annotations: unknown[];
@@ -116,7 +131,11 @@ export async function startAnnotateServer(
     feedback: string;
     annotations: unknown[];
   }>((resolve) => {
-    resolveDecision = resolve;
+    resolveDecision = (result) => {
+      if (decisionResolved) return;
+      decisionResolved = true;
+      resolve(result);
+    };
   });
 
   // Start server with retry logic
@@ -200,6 +219,12 @@ export async function startAnnotateServer(
           });
           if (externalResponse) return externalResponse;
 
+          // API: Close the annotation session without feedback
+          if (url.pathname === "/api/close" && req.method === "POST") {
+            closeSession();
+            return Response.json({ ok: true });
+          }
+
           // API: Submit annotation feedback
           if (url.pathname === "/api/feedback" && req.method === "POST") {
             try {
@@ -228,7 +253,7 @@ export async function startAnnotateServer(
           if (url.pathname === "/favicon.svg") return handleFavicon();
 
           // Serve embedded HTML for all other routes (SPA)
-          return new Response(htmlContent, {
+          return new Response(injectLifecycleScript(htmlContent), {
             headers: { "Content-Type": "text/html" },
           });
         },
@@ -273,6 +298,7 @@ export async function startAnnotateServer(
     port,
     url: serverUrl,
     isRemote,
+    close: closeSession,
     waitForDecision: () => decisionPromise,
     stop: () => server.stop(),
   };

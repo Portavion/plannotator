@@ -65,6 +65,8 @@ export interface ReviewServerResult {
   url: string;
   /** Whether running in remote mode */
   isRemote: boolean;
+  /** Close the review session without feedback */
+  close: () => void;
   /** Wait for user review decision */
   waitForDecision: () => Promise<{
     approved: boolean;
@@ -80,6 +82,10 @@ export interface ReviewServerResult {
 
 const MAX_RETRIES = 5;
 const RETRY_DELAY_MS = 500;
+
+function injectLifecycleScript(htmlContent: string): string {
+  return `${htmlContent}\n<script>(function(){\n  let submitted = false;\n  const originalFetch = window.fetch.bind(window);\n  window.fetch = function(input, init) {\n    const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);\n    if (url.includes('/api/feedback')) submitted = true;\n    return originalFetch(input, init);\n  };\n  const notifyClose = function() {\n    if (submitted) return;\n    navigator.sendBeacon('/api/close');\n  };\n  window.addEventListener('pagehide', notifyClose);\n  document.addEventListener('visibilitychange', function() {\n    if (document.visibilityState === 'hidden') notifyClose();\n  });\n})();</script>`;
+}
 
 /**
  * Start the Code Review server
@@ -221,6 +227,16 @@ export async function startReviewServer(
   }
 
   // Decision promise
+  let decisionResolved = false;
+  const closeSession = () => {
+    if (decisionResolved) return;
+    deleteDraft(draftKey);
+    resolveDecision({
+      approved: false,
+      feedback: "",
+      annotations: [],
+    });
+  };
   let resolveDecision: (result: {
     approved: boolean;
     feedback: string;
@@ -233,7 +249,11 @@ export async function startReviewServer(
     annotations: unknown[];
     agentSwitch?: string;
   }>((resolve) => {
-    resolveDecision = resolve;
+    resolveDecision = (result) => {
+      if (decisionResolved) return;
+      decisionResolved = true;
+      resolve(result);
+    };
   });
 
   // Start server with retry logic
@@ -438,6 +458,12 @@ export async function startReviewServer(
             return handleDraftLoad(draftKey);
           }
 
+          // API: Close the review session without feedback
+          if (url.pathname === "/api/close" && req.method === "POST") {
+            closeSession();
+            return Response.json({ ok: true });
+          }
+
           // API: Editor annotations (VS Code extension)
           const editorResponse = await editorAnnotations.handle(req, url);
           if (editorResponse) return editorResponse;
@@ -540,7 +566,7 @@ export async function startReviewServer(
           if (url.pathname === "/favicon.svg") return handleFavicon();
 
           // Serve embedded HTML for all other routes (SPA)
-          return new Response(htmlContent, {
+          return new Response(injectLifecycleScript(htmlContent), {
             headers: { "Content-Type": "text/html" },
           });
         },
@@ -581,6 +607,7 @@ export async function startReviewServer(
     port,
     url: serverUrl,
     isRemote,
+    close: closeSession,
     waitForDecision: () => decisionPromise,
     stop: () => {
       aiSessionManager.disposeAll();

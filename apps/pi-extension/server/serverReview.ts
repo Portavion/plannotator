@@ -60,6 +60,7 @@ export interface ReviewServerResult {
 	port: number;
 	portSource: "env" | "remote-default" | "random";
 	url: string;
+	close: () => void;
 	waitForDecision: () => Promise<{
 		approved: boolean;
 		feedback: string;
@@ -67,6 +68,10 @@ export interface ReviewServerResult {
 		agentSwitch?: string;
 	}>;
 	stop: () => void;
+}
+
+function injectLifecycleScript(htmlContent: string): string {
+	return `${htmlContent}\n<script>(function(){\n  let submitted = false;\n  const originalFetch = window.fetch.bind(window);\n  window.fetch = function(input, init) {\n    const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);\n    if (url.includes('/api/feedback')) submitted = true;\n    return originalFetch(input, init);\n  };\n  const notifyClose = function() {\n    if (submitted) return;\n    navigator.sendBeacon('/api/close');\n  };\n  window.addEventListener('pagehide', notifyClose);\n  document.addEventListener('visibilitychange', function() {\n    if (document.visibilityState === 'hidden') notifyClose();\n  });\n})();</script>`;
 }
 
 const reviewRuntime: ReviewGitRuntime = {
@@ -153,19 +158,33 @@ export async function startReviewServer(options: {
 		options.sharingEnabled ?? process.env.PLANNOTATOR_SHARE !== "disabled";
 	const shareBaseUrl =
 		(options.shareBaseUrl ?? process.env.PLANNOTATOR_SHARE_URL) || undefined;
+	let decisionResolved = false;
 	let resolveDecision!: (result: {
 		approved: boolean;
 		feedback: string;
 		annotations: unknown[];
 		agentSwitch?: string;
 	}) => void;
+	const closeSession = () => {
+		if (decisionResolved) return;
+		deleteDraft(draftKey);
+		resolveDecision({
+			approved: false,
+			feedback: "",
+			annotations: [],
+		});
+	};
 	const decisionPromise = new Promise<{
 		approved: boolean;
 		feedback: string;
 		annotations: unknown[];
 		agentSwitch?: string;
 	}>((r) => {
-		resolveDecision = r;
+		resolveDecision = (result) => {
+			if (decisionResolved) return;
+			decisionResolved = true;
+			r(result);
+		};
 	});
 
 	// AI provider setup (graceful — AI features degrade if SDK unavailable)
@@ -513,6 +532,9 @@ export async function startReviewServer(options: {
 			}
 		} else if (url.pathname === "/api/draft") {
 			await handleDraftRequest(req, res, draftKey);
+		} else if (url.pathname === "/api/close" && req.method === "POST") {
+			closeSession();
+			json(res, { ok: true });
 		} else if (url.pathname === "/favicon.svg") {
 			handleFavicon(res);
 		} else if (await editorAnnotations.handle(req, res, url)) {
@@ -563,7 +585,7 @@ export async function startReviewServer(options: {
 				json(res, { error: message }, 500);
 			}
 		} else {
-			html(res, options.htmlContent);
+			html(res, injectLifecycleScript(options.htmlContent));
 		}
 	});
 
@@ -573,6 +595,7 @@ export async function startReviewServer(options: {
 		port,
 		portSource,
 		url: `http://localhost:${port}`,
+		close: closeSession,
 		waitForDecision: () => decisionPromise,
 		stop: () => {
 			aiSessionManager?.disposeAll();
