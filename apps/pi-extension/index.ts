@@ -22,9 +22,9 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import type { ThinkingLevel } from "@mariozechner/pi-agent-core";
 import { Type } from "@mariozechner/pi-ai";
-import type {
-	ExtensionAPI,
-	ExtensionContext,
+import {
+	type ExtensionAPI,
+	type ExtensionContext,
 } from "@mariozechner/pi-coding-agent";
 import { Key } from "@mariozechner/pi-tui";
 import { buildPromptVariables, formatTodoList, loadPlannotatorConfig, renderTemplate, resolvePhaseProfile } from "./config.js";
@@ -91,9 +91,6 @@ function getTextContent(message: { content: AssistantTextBlock[] }): string {
 function getPlanReviewAvailabilityWarning(options: { hasUI: boolean; hasPlanHtml: boolean }): string | null {
 	const { hasUI, hasPlanHtml } = options;
 	if (hasUI && hasPlanHtml) return null;
-	if (!hasUI && !hasPlanHtml) {
-		return "Plannotator: interactive plan review is unavailable in this session (no UI support and missing built assets). Plans will auto-approve on exit_plan_mode.";
-	}
 	if (!hasUI) {
 		return "Plannotator: interactive plan review is unavailable in this session (no UI support). Plans will auto-approve on exit_plan_mode.";
 	}
@@ -343,6 +340,8 @@ export default function plannotator(pi: ExtensionAPI): void {
 				return;
 			}
 
+			ctx.ui.notify("Opening code review UI... Press Esc in pi to stop waiting.", "info");
+
 			try {
 				const prUrl = args?.trim() || undefined;
 				const isPRReview = prUrl?.startsWith("http://") || prUrl?.startsWith("https://");
@@ -460,7 +459,7 @@ export default function plannotator(pi: ExtensionAPI): void {
 				return;
 			}
 
-			ctx.ui.notify("Opening annotation UI for last message...", "info");
+			ctx.ui.notify("Opening annotation UI for last message... Press Esc in pi to stop waiting.", "info");
 
 			try {
 				const result = await openLastMessageAnnotation(ctx, lastText);

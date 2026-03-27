@@ -3,7 +3,7 @@ import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
+import { BorderedLoader, type ExtensionContext } from "@mariozechner/pi-coding-agent";
 import {
 	getGitContext,
 	reviewRuntime,
@@ -111,13 +111,54 @@ function openBrowserForServer(serverUrl: string, ctx: ExtensionContext): void {
 }
 
 async function openBrowserAndWait<T>(
-	server: { url: string; stop: () => void },
+	server: { url: string; close?: () => void; stop: () => void },
 	ctx: ExtensionContext,
 	waitForResult: () => Promise<T>,
 ): Promise<T> {
 	openBrowserForServer(server.url, ctx);
 
-	const result = await waitForResult();
+	let finishWaitOverlay: ((result: "cancel" | "done") => void) | undefined;
+	const closeWaitOverlay = (result: "cancel" | "done"): void => {
+		if (!finishWaitOverlay) return;
+		const done = finishWaitOverlay;
+		finishWaitOverlay = undefined;
+		done(result);
+	};
+	const resultPromise = waitForResult();
+	const waitOverlayPromise = ctx.hasUI && server.close
+		? ctx.ui.custom<"cancel" | "done">(
+				(tui, theme, _kb, done) => {
+					finishWaitOverlay = done;
+					const loader = new BorderedLoader(
+						tui,
+						theme,
+						"Waiting for browser feedback...",
+					);
+					loader.onAbort = () => closeWaitOverlay("cancel");
+					return loader;
+				},
+				{
+					overlay: true,
+					overlayOptions: {
+						anchor: "center",
+						width: 44,
+					},
+				},
+		  )
+		: null;
+	const outcome = waitOverlayPromise
+		? await Promise.race([
+				resultPromise.then((result) => ({ type: "decision" as const, result })),
+				waitOverlayPromise.then((result) => ({ type: "overlay" as const, result })),
+		  ])
+		: { type: "decision" as const, result: await resultPromise };
+
+	if (outcome.type === "overlay") {
+		server.close?.();
+	}
+
+	const result = outcome.type === "decision" ? outcome.result : await resultPromise;
+	closeWaitOverlay("done");
 	await delay(1500);
 	server.stop();
 	return result;
