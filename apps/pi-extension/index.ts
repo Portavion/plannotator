@@ -88,9 +88,36 @@ function getTextContent(message: { content: AssistantTextBlock[] }): string {
 		.join("\n");
 }
 
+function resolveMarkdownPath(
+	cwd: string,
+	rawFilePath: string,
+): { displayPath: string; absolutePath: string } {
+	const filePath = rawFilePath.trim();
+	const absolutePath = resolve(cwd, filePath);
+	if (existsSync(absolutePath)) {
+		return { displayPath: filePath, absolutePath };
+	}
+
+	if (filePath.startsWith("@")) {
+		const normalizedPath = filePath.slice(1);
+		const normalizedAbsolutePath = resolve(cwd, normalizedPath);
+		if (existsSync(normalizedAbsolutePath)) {
+			return {
+				displayPath: normalizedPath,
+				absolutePath: normalizedAbsolutePath,
+			};
+		}
+	}
+
+	return { displayPath: filePath, absolutePath };
+}
+
 function getPlanReviewAvailabilityWarning(options: { hasUI: boolean; hasPlanHtml: boolean }): string | null {
 	const { hasUI, hasPlanHtml } = options;
 	if (hasUI && hasPlanHtml) return null;
+	if (!hasUI && !hasPlanHtml) {
+		return "Plannotator: interactive plan review is unavailable in this session (no UI support and missing built assets). Plans will auto-approve on exit_plan_mode.";
+	}
 	if (!hasUI) {
 		return "Plannotator: interactive plan review is unavailable in this session (no UI support). Plans will auto-approve on exit_plan_mode.";
 	}
@@ -388,7 +415,7 @@ export default function plannotator(pi: ExtensionAPI): void {
 				return;
 			}
 
-			const absolutePath = resolve(ctx.cwd, filePath);
+			const { displayPath, absolutePath } = resolveMarkdownPath(ctx.cwd, filePath);
 			if (!existsSync(absolutePath)) {
 				ctx.ui.notify(`File not found: ${absolutePath}`, "error");
 				return;
@@ -415,10 +442,10 @@ export default function plannotator(pi: ExtensionAPI): void {
 				markdown = "";
 				folderPath = absolutePath;
 				mode = "annotate-folder";
-				ctx.ui.notify(`Opening annotation UI for folder ${filePath}...`, "info");
+				ctx.ui.notify(`Opening annotation UI for folder ${displayPath}... Press Esc in pi to stop waiting.`, "info");
 			} else {
 				markdown = readFileSync(absolutePath, "utf-8");
-				ctx.ui.notify(`Opening annotation UI for ${filePath}...`, "info");
+				ctx.ui.notify(`Opening annotation UI for ${displayPath}... Press Esc in pi to stop waiting.`, "info");
 			}
 
 			try {
