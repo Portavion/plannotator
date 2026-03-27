@@ -24,9 +24,10 @@ import { fileURLToPath } from "node:url";
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import type { AssistantMessage, TextContent } from "@mariozechner/pi-ai";
 import { Type } from "@mariozechner/pi-ai";
-import type {
-	ExtensionAPI,
-	ExtensionContext,
+import {
+	BorderedLoader,
+	type ExtensionAPI,
+	type ExtensionContext,
 } from "@mariozechner/pi-coding-agent";
 import { Key } from "@mariozechner/pi-tui";
 import {
@@ -60,6 +61,7 @@ import {
 /** Common interface for servers that can wait for a user decision in a browser. */
 interface DecisionServer<T> {
 	url: string;
+	close?: () => void;
 	stop: () => void;
 	waitForDecision: () => Promise<T>;
 }
@@ -112,7 +114,50 @@ async function runBrowserReview<T>(
 		);
 	}
 
-	const result = await server.waitForDecision();
+	let finishWaitOverlay: ((result: "cancel" | "done") => void) | undefined;
+	const closeWaitOverlay = (result: "cancel" | "done"): void => {
+		if (!finishWaitOverlay) return;
+		const done = finishWaitOverlay;
+		finishWaitOverlay = undefined;
+		done(result);
+	};
+
+	const waitOverlayPromise = ctx.hasUI && server.close
+		? ctx.ui.custom<"cancel" | "done">(
+				(tui, theme, _kb, done) => {
+					finishWaitOverlay = done;
+					const loader = new BorderedLoader(
+						tui,
+						theme,
+						"Waiting for browser feedback...",
+					);
+					loader.onAbort = () => closeWaitOverlay("cancel");
+					return loader;
+				},
+				{
+					overlay: true,
+					overlayOptions: {
+						anchor: "center",
+						width: 44,
+					},
+				},
+		  )
+		: null;
+
+	const outcome = waitOverlayPromise
+		? await Promise.race([
+				server.waitForDecision().then((result) => ({ type: "decision" as const, result })),
+				waitOverlayPromise.then((result) => ({ type: "overlay" as const, result })),
+		  ])
+		: { type: "decision" as const, result: await server.waitForDecision() };
+
+	if (outcome.type === "overlay") {
+		server.close?.();
+	}
+
+	const result =
+		outcome.type === "decision" ? outcome.result : await server.waitForDecision();
+	closeWaitOverlay("done");
 	await new Promise((r) => setTimeout(r, 1500));
 	server.stop();
 	return result;
@@ -289,7 +334,7 @@ export default function plannotator(pi: ExtensionAPI): void {
 				return;
 			}
 
-			ctx.ui.notify("Opening code review UI...", "info");
+			ctx.ui.notify("Opening code review UI... Press Esc in pi to stop waiting.", "info");
 
 			let server: ReviewServerResult;
 			try {
@@ -455,7 +500,7 @@ export default function plannotator(pi: ExtensionAPI): void {
 				return;
 			}
 
-			ctx.ui.notify("Opening annotation UI for last message...", "info");
+			ctx.ui.notify("Opening annotation UI for last message... Press Esc in pi to stop waiting.", "info");
 
 			let server: AnnotateServerResult;
 			try {

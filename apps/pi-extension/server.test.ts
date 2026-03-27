@@ -214,6 +214,45 @@ describe("pi review server", () => {
     }
   });
 
+  test("close endpoint resolves review without feedback", async () => {
+    const homeDir = makeTempDir("plannotator-pi-home-");
+    const repoDir = initRepo();
+    process.env.HOME = homeDir;
+    process.chdir(repoDir);
+    process.env.PLANNOTATOR_PORT = String(await reservePort());
+
+    writeFileSync(join(repoDir, "tracked.txt"), "after\n", "utf-8");
+
+    const gitContext = await getGitContext();
+    const diff = await runGitDiff("uncommitted", gitContext.defaultBranch);
+
+    const server = await startReviewServer({
+      rawPatch: diff.patch,
+      gitRef: diff.label,
+      error: diff.error,
+      diffType: "uncommitted",
+      gitContext,
+      origin: "pi",
+      htmlContent: "<!doctype html><html><body>review</body></html>",
+    });
+
+    try {
+      const closeResponse = await fetch(`${server.url}/api/close`, {
+        method: "POST",
+      });
+      expect(closeResponse.status).toBe(200);
+
+      await expect(server.waitForDecision()).resolves.toEqual({
+        approved: false,
+        feedback: "",
+        annotations: [],
+        agentSwitch: undefined,
+      });
+    } finally {
+      server.stop();
+    }
+  });
+
   test("git-add endpoint stages and unstages files in review mode", async () => {
     const homeDir = makeTempDir("plannotator-pi-home-");
     const repoDir = initRepo();

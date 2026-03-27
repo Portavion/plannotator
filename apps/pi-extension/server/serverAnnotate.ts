@@ -21,8 +21,13 @@ export interface AnnotateServerResult {
 	port: number;
 	portSource: "env" | "remote-default" | "random";
 	url: string;
+	close: () => void;
 	waitForDecision: () => Promise<{ feedback: string; annotations: unknown[] }>;
 	stop: () => void;
+}
+
+function injectLifecycleScript(htmlContent: string): string {
+	return `${htmlContent}\n<script>(function(){\n  let submitted = false;\n  const originalFetch = window.fetch.bind(window);\n  window.fetch = function(input, init) {\n    const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);\n    if (url.includes('/api/feedback')) submitted = true;\n    return originalFetch(input, init);\n  };\n  const notifyClose = function() {\n    if (submitted) return;\n    navigator.sendBeacon('/api/close');\n  };\n  window.addEventListener('pagehide', notifyClose);\n  document.addEventListener('visibilitychange', function() {\n    if (document.visibilityState === 'hidden') notifyClose();\n  });\n})();</script>`;
 }
 
 export async function startAnnotateServer(options: {
@@ -44,15 +49,28 @@ export async function startAnnotateServer(options: {
 	const pasteApiUrl =
 		(options.pasteApiUrl ?? process.env.PLANNOTATOR_PASTE_URL) || undefined;
 
+	let decisionResolved = false;
 	let resolveDecision!: (result: {
 		feedback: string;
 		annotations: unknown[];
 	}) => void;
+	const closeSession = () => {
+		if (decisionResolved) return;
+		deleteDraft(draftKey);
+		resolveDecision({
+			feedback: "",
+			annotations: [],
+		});
+	};
 	const decisionPromise = new Promise<{
 		feedback: string;
 		annotations: unknown[];
 	}>((r) => {
-		resolveDecision = r;
+		resolveDecision = (result) => {
+			if (decisionResolved) return;
+			decisionResolved = true;
+			r(result);
+		};
 	});
 
 	// Draft key for annotation persistence
@@ -93,6 +111,9 @@ export async function startAnnotateServer(options: {
 			await handleUploadRequest(req, res);
 		} else if (url.pathname === "/api/draft") {
 			await handleDraftRequest(req, res, draftKey);
+		} else if (url.pathname === "/api/close" && req.method === "POST") {
+			closeSession();
+			json(res, { ok: true });
 		} else if (url.pathname === "/api/doc" && req.method === "GET") {
 			// Inject source file's directory as base for relative path resolution
 			if (!url.searchParams.has("base") && options.filePath) {
@@ -117,7 +138,7 @@ export async function startAnnotateServer(options: {
 				json(res, { error: message }, 500);
 			}
 		} else {
-			html(res, options.htmlContent);
+			html(res, injectLifecycleScript(options.htmlContent));
 		}
 	});
 
@@ -127,6 +148,7 @@ export async function startAnnotateServer(options: {
 		port,
 		portSource,
 		url: `http://localhost:${port}`,
+		close: closeSession,
 		waitForDecision: () => decisionPromise,
 		stop: () => server.close(),
 	};
