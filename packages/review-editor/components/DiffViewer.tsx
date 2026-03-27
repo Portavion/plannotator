@@ -108,6 +108,8 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
   const { theme, colorTheme, resolvedMode } = useTheme();
   const containerRef = useRef<HTMLDivElement>(null);
   const [fileCommentAnchor, setFileCommentAnchor] = useState<HTMLElement | null>(null);
+  const [isOpeningInEditor, setIsOpeningInEditor] = useState(false);
+  const [openInEditorError, setOpenInEditorError] = useState<string | null>(null);
 
   // Resizable split pane — only applies when Pierre renders a two-column grid
   // (files with both additions and deletions). Add-only or delete-only files
@@ -162,6 +164,28 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
 
   const toolbar = useAnnotationToolbar({ patch, filePath, onLineSelection, onAddAnnotation, onEditAnnotation });
 
+  const handleOpenInEditor = useCallback(async () => {
+    setIsOpeningInEditor(true);
+    setOpenInEditorError(null);
+
+    try {
+      const response = await fetch('/api/file/open', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filePath }),
+      });
+      const data = await response.json().catch(() => null) as { error?: string } | null;
+
+      if (!response.ok) {
+        setOpenInEditorError(data?.error ?? 'Failed to open file in editor');
+      }
+    } catch (err) {
+      setOpenInEditorError(err instanceof Error ? err.message : 'Failed to open file in editor');
+    } finally {
+      setIsOpeningInEditor(false);
+    }
+  }, [filePath]);
+
   // Parse patch into FileDiffMetadata for @pierre/diffs FileDiff component
   const fileDiff = useMemo(() => getSingularPatch(patch), [patch]);
 
@@ -201,6 +225,8 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
     if (prevFilePathRef.current !== filePath) {
       prevFilePathRef.current = filePath;
       onLineSelection(null);
+      setOpenInEditorError(null);
+      setIsOpeningInEditor(false);
     }
   }, [filePath, onLineSelection]);
 
@@ -407,6 +433,9 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
         onStage={onStage}
         canStage={canStage}
         stageError={stageError}
+        isOpeningInEditor={isOpeningInEditor}
+        openInEditorError={openInEditorError}
+        onOpenInEditor={handleOpenInEditor}
         onFileComment={setFileCommentAnchor}
       />
 
