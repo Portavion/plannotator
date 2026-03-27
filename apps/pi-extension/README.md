@@ -45,7 +45,7 @@ Start Pi in plan mode:
 pi --plan
 ```
 
-Or toggle it during a session with `/plannotator` or `Ctrl+Alt+P`. The command accepts an optional file path argument (`/plannotator plans/auth.md`) or prompts you to choose one interactively.
+Or start planning with `--plan-file` to choose a custom path up front.
 
 In plan mode the agent is restricted — destructive commands are blocked, writes are limited to the plan file. It explores your codebase, then writes a plan using markdown checklists:
 
@@ -65,15 +65,15 @@ The agent iterates on the plan until you approve, then executes with full tool a
 
 ### Code review
 
-Run `/plannotator-review` to open your current git changes in the code review UI. Annotate specific lines, switch between diff views (uncommitted, staged, last commit, branch), and submit feedback that gets sent to the agent.
+Run `/feedback-code` to open your current git changes in the code review UI. Annotate specific lines, switch between diff views (uncommitted, staged, last commit, branch), and submit feedback that gets sent to the agent.
 
 ### Markdown annotation
 
-Run `/plannotator-annotate <file.md>` to open any markdown file in the annotation UI. Useful for reviewing documentation or design specs with the agent.
+Run `/feedback-file <file.md>` to open any markdown file in the annotation UI. Useful for reviewing documentation or design specs with the agent.
 
 ### Annotate last message
 
-Run `/plannotator-last` to annotate the agent's most recent response. The message opens in the annotation UI where you can highlight text, add comments, and send structured feedback back to the agent.
+Run `/feedback-last` to annotate the agent's most recent response. The message opens in the annotation UI where you can highlight text, add comments, and send structured feedback back to the agent.
 
 ### Progress tracking
 
@@ -83,12 +83,9 @@ During execution, the agent marks completed steps with `[DONE:n]` markers. Progr
 
 | Command | Description |
 |---------|-------------|
-| `/plannotator [path]` | Toggle plan mode. Accepts optional file path or prompts interactively |
-| `/plannotator-set-file <path>` | Change the plan file path mid-session |
-| `/plannotator-status` | Show current phase, plan file, and progress |
-| `/plannotator-review` | Open code review UI for current changes |
-| `/plannotator-annotate <file>` | Open markdown file in annotation UI |
-| `/plannotator-last` | Annotate the last assistant message |
+| `/feedback-code` | Open code review UI for current changes |
+| `/feedback-file <file>` | Open markdown file in annotation UI |
+| `/feedback-last` | Annotate the last assistant message |
 
 ## Flags
 
@@ -96,12 +93,6 @@ During execution, the agent marks completed steps with `[DONE:n]` markers. Progr
 |------|-------------|
 | `--plan` | Start in plan mode |
 | `--plan-file <path>` | Custom plan file path (default: `PLAN.md`) |
-
-## Keyboard shortcuts
-
-| Shortcut | Description |
-|----------|-------------|
-| `Ctrl+Alt+P` | Toggle plan mode |
 
 ## How it works
 

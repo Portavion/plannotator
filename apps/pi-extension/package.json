@@ -16,8 +16,7 @@
   },
   "keywords": ["pi-package", "plannotator", "plan-review", "ai-agent", "coding-agent"],
   "pi": {
-    "extensions": ["./"],
-    "skills": ["./skills"]
+    "extensions": ["./"]
   },
   "files": [
     "index.ts",
@@ -27,11 +26,10 @@
     "generated/",
     "README.md",
     "plannotator.html",
-    "review-editor.html",
-    "skills/"
+    "review-editor.html"
   ],
   "scripts": {
-    "build": "cp ../hook/dist/index.html plannotator.html && cp ../hook/dist/review.html review-editor.html && rm -rf skills && cp -r ../skills skills && bash vendor.sh",
+    "build": "rm -rf skills && cp ../hook/dist/index.html plannotator.html && cp ../hook/dist/review.html review-editor.html && bash vendor.sh",
     "prepublishOnly": "cd ../.. && bun run build:pi"
   },
   "peerDependencies": {

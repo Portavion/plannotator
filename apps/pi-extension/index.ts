@@ -7,15 +7,15 @@
  * with annotations, or request changes.
  *
  * Features:
- * - /plannotator command or Ctrl+Alt+P to toggle
- * - --plan flag to start in planning mode
+ * - --plan flag to start in plan mode
  * - --plan-file flag to customize the plan file path
  * - Bash unrestricted during planning (prompt-guided)
  * - Write restricted to plan file only during planning
  * - plannotator_submit_plan tool with browser-based visual approval
  * - [DONE:n] markers for execution progress tracking
- * - /plannotator-review command for code review
- * - /plannotator-annotate command for markdown annotation
+ * - /feedback-code command for code review
+ * - /feedback-file command for markdown annotation
+ * - /feedback-last command for last-message annotation
  */
 
 import { existsSync, readFileSync, statSync } from "node:fs";
@@ -29,7 +29,6 @@ import {
 	type ExtensionAPI,
 	type ExtensionContext,
 } from "@mariozechner/pi-coding-agent";
-import { Key } from "@mariozechner/pi-tui";
 import {
 	type ChecklistItem,
 	markCompletedSteps,
@@ -42,7 +41,6 @@ import { openBrowser } from "./server/network.js";
 import {
 	type AnnotateServerResult,
 	getGitContext,
-	type PlanServerResult,
 	type ReviewServerResult,
 	runGitDiff,
 	startAnnotateServer,
@@ -271,83 +269,9 @@ export default function plannotator(pi: ExtensionAPI): void {
 		);
 	}
 
-	function exitToIdle(ctx: ExtensionContext): void {
-		phase = "idle";
-		checklistItems = [];
-		applyToolsForPhase();
-		preplanTools = null;
-		updateStatus(ctx);
-		updateWidget(ctx);
-		persistState();
-		ctx.ui.notify("Plannotator: disabled. Full access restored.");
-	}
+	// ── Commands ─────────────────────────────────────────────────────────
 
-	function togglePlanMode(ctx: ExtensionContext): void {
-		if (phase === "idle") {
-			enterPlanning(ctx);
-		} else {
-			exitToIdle(ctx);
-		}
-	}
-
-	// ── Commands & Shortcuts ─────────────────────────────────────────────
-
-	pi.registerCommand("plannotator", {
-		description: "Toggle plannotator (file-based plan mode)",
-		handler: async (args, ctx) => {
-			if (phase !== "idle") {
-				exitToIdle(ctx);
-				return;
-			}
-
-			// Accept path as argument: /plannotator plans/auth.md
-			let targetPath = args?.trim() || undefined;
-
-			// No arg — prompt for file path interactively
-			if (!targetPath && ctx.hasUI) {
-				targetPath = await ctx.ui.input("Plan file path", planFilePath);
-				if (targetPath === undefined) return; // cancelled
-			}
-
-			if (targetPath) planFilePath = targetPath;
-			enterPlanning(ctx);
-		},
-	});
-
-	pi.registerCommand("plannotator-status", {
-		description: "Show plannotator status",
-		handler: async (_args, ctx) => {
-			const parts = [`Phase: ${phase}`, `Plan file: ${planFilePath}`];
-			if (checklistItems.length > 0) {
-				const done = checklistItems.filter((t) => t.completed).length;
-				parts.push(`Progress: ${done}/${checklistItems.length}`);
-			}
-			ctx.ui.notify(parts.join("\n"), "info");
-		},
-	});
-
-	pi.registerCommand("plannotator-set-file", {
-		description: "Change the plan file path",
-		handler: async (args, ctx) => {
-			let targetPath = args?.trim() || undefined;
-
-			if (!targetPath && ctx.hasUI) {
-				targetPath = await ctx.ui.input("Plan file path", planFilePath);
-				if (targetPath === undefined) return; // cancelled
-			}
-
-			if (!targetPath) {
-				ctx.ui.notify(`Current plan file: ${planFilePath}`, "info");
-				return;
-			}
-
-			planFilePath = targetPath;
-			persistState();
-			ctx.ui.notify(`Plan file changed to: ${planFilePath}`);
-		},
-	});
-
-	pi.registerCommand("plannotator-review", {
+	pi.registerCommand("feedback-code", {
 		description: "Open interactive code review for current changes",
 		handler: async (_args, ctx) => {
 			if (!reviewHtmlContent) {
@@ -406,12 +330,12 @@ export default function plannotator(pi: ExtensionAPI): void {
 		},
 	});
 
-	pi.registerCommand("plannotator-annotate", {
+	pi.registerCommand("feedback-file", {
 		description: "Open markdown file or folder in annotation UI",
 		handler: async (args, ctx) => {
 			const filePath = args?.trim();
 			if (!filePath) {
-				ctx.ui.notify("Usage: /plannotator-annotate <file.md | folder/>", "error");
+				ctx.ui.notify("Usage: /feedback-file <file.md | folder/>", "error");
 				return;
 			}
 			if (!planHtmlContent) {
@@ -491,7 +415,7 @@ export default function plannotator(pi: ExtensionAPI): void {
 		},
 	});
 
-	pi.registerCommand("plannotator-last", {
+	pi.registerCommand("feedback-last", {
 		description: "Annotate the last assistant message",
 		handler: async (_args, ctx) => {
 			if (!planHtmlContent) {
@@ -558,59 +482,6 @@ export default function plannotator(pi: ExtensionAPI): void {
 		},
 	});
 
-	pi.registerCommand("plannotator-archive", {
-		description: "Browse saved plan decisions",
-		handler: async (_args, ctx) => {
-			if (!planHtmlContent) {
-				ctx.ui.notify(
-					"Archive UI not available. Run 'bun run build' in the pi-extension directory.",
-					"error",
-				);
-				return;
-			}
-
-			ctx.ui.notify("Opening plan archive...", "info");
-
-			let server: PlanServerResult;
-			try {
-				server = await startPlanReviewServer({
-					plan: "",
-					htmlContent: planHtmlContent,
-					origin: "pi",
-					mode: "archive",
-					sharingEnabled: process.env.PLANNOTATOR_SHARE !== "disabled",
-					shareBaseUrl: process.env.PLANNOTATOR_SHARE_URL || undefined,
-					pasteApiUrl: process.env.PLANNOTATOR_PASTE_URL || undefined,
-				});
-			} catch (err) {
-				ctx.ui.notify(
-					`Failed to start archive: ${getStartupErrorMessage(err)}`,
-					"error",
-				);
-				return;
-			}
-
-			const browserResult = openBrowser(server.url);
-			if (browserResult.isRemote) {
-				ctx.ui.notify(
-					`Remote session. Open manually: ${browserResult.url}`,
-					"info",
-				);
-			}
-
-			if (server.waitForDone) {
-				await server.waitForDone();
-			}
-			await new Promise((r) => setTimeout(r, 1500));
-			server.stop();
-			ctx.ui.notify("Archive browser closed.", "info");
-		},
-	});
-
-	pi.registerShortcut(Key.ctrlAlt("p"), {
-		description: "Toggle plannotator",
-		handler: async (ctx) => togglePlanMode(ctx),
-	});
 
 	// ── plannotator_submit_plan Tool ────────────────────────────────────
 
