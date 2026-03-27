@@ -98,6 +98,30 @@ function getTextContent(message: AssistantMessage): string {
 		.join("\n");
 }
 
+function resolveMarkdownPath(
+	cwd: string,
+	rawFilePath: string,
+): { displayPath: string; absolutePath: string } {
+	const filePath = rawFilePath.trim();
+	const absolutePath = resolve(cwd, filePath);
+	if (existsSync(absolutePath)) {
+		return { displayPath: filePath, absolutePath };
+	}
+
+	if (filePath.startsWith("@")) {
+		const normalizedPath = filePath.slice(1);
+		const normalizedAbsolutePath = resolve(cwd, normalizedPath);
+		if (existsSync(normalizedAbsolutePath)) {
+			return {
+				displayPath: normalizedPath,
+				absolutePath: normalizedAbsolutePath,
+			};
+		}
+	}
+
+	return { displayPath: filePath, absolutePath };
+}
+
 /**
  * Open browser for user review, wait for decision, then stop server.
  * Handles remote session notification automatically.
@@ -398,7 +422,7 @@ export default function plannotator(pi: ExtensionAPI): void {
 				return;
 			}
 
-			const absolutePath = resolve(ctx.cwd, filePath);
+			const { displayPath, absolutePath } = resolveMarkdownPath(ctx.cwd, filePath);
 			if (!existsSync(absolutePath)) {
 				ctx.ui.notify(`File not found: ${absolutePath}`, "error");
 				return;
@@ -425,10 +449,10 @@ export default function plannotator(pi: ExtensionAPI): void {
 				markdown = "";
 				folderPath = absolutePath;
 				mode = "annotate-folder";
-				ctx.ui.notify(`Opening annotation UI for folder ${filePath}...`, "info");
+				ctx.ui.notify(`Opening annotation UI for folder ${displayPath}... Press Esc in pi to stop waiting.`, "info");
 			} else {
 				markdown = readFileSync(absolutePath, "utf-8");
-				ctx.ui.notify(`Opening annotation UI for ${filePath}...`, "info");
+				ctx.ui.notify(`Opening annotation UI for ${displayPath}... Press Esc in pi to stop waiting.`, "info");
 			}
 
 			let server: AnnotateServerResult;
