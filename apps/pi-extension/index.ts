@@ -14,8 +14,8 @@
  * - Write restricted to plan file only during planning
  * - plannotator_submit_plan tool with browser-based visual approval
  * - [DONE:n] markers for execution progress tracking
- * - /plannotator-review command for code review
- * - /plannotator-annotate command for markdown annotation
+ * - /plannotator-review and /feedback-code commands for code review
+ * - /plannotator-annotate, /plannotator-last, /feedback-file, and /feedback-last commands for annotations
  */
 
 import { existsSync, readFileSync, statSync } from "node:fs";
@@ -356,154 +356,184 @@ export default function plannotator(pi: ExtensionAPI): void {
 		},
 	});
 
-	pi.registerCommand("plannotator-review", {
-		description: "Open interactive code review for current changes or a PR URL",
-		handler: async (args, ctx) => {
-			if (!hasReviewBrowserHtml()) {
-				ctx.ui.notify(
-					"Code review UI not available. Run 'bun run build' in the pi-extension directory.",
-					"error",
-				);
+	const handleReviewCommand = async (
+		args: string | undefined,
+		ctx: ExtensionContext,
+	): Promise<void> => {
+		if (!hasReviewBrowserHtml()) {
+			ctx.ui.notify(
+				"Code review UI not available. Run 'bun run build' in the pi-extension directory.",
+				"error",
+			);
+			return;
+		}
+
+		ctx.ui.notify("Opening code review UI... Press Esc in pi to stop waiting.", "info");
+
+		try {
+			const prUrl = args?.trim() || undefined;
+			const isPRReview = prUrl?.startsWith("http://") || prUrl?.startsWith("https://");
+			const result = await openCodeReview(ctx, { prUrl });
+			if (result.feedback) {
+				if (result.approved) {
+					pi.sendUserMessage(
+						`# Code Review\n\nCode review completed — no changes requested.`,
+					);
+				} else if (isPRReview) {
+					// Platform PR actions (approve/comment) return approved:false with a
+					// status message — don't tell the agent to "address" a platform action.
+					pi.sendUserMessage(result.feedback);
+				} else {
+					pi.sendUserMessage(
+						`${result.feedback}\n\nPlease address this feedback.`,
+					);
+				}
+			} else {
+				ctx.ui.notify("Code review closed (no feedback).", "info");
+			}
+		} catch (err) {
+			ctx.ui.notify(
+				`Failed to start code review UI: ${getStartupErrorMessage(err)}`,
+				"error",
+			);
+		}
+	};
+
+	const handleAnnotateCommand = async (
+		args: string | undefined,
+		ctx: ExtensionContext,
+	): Promise<void> => {
+		const filePath = args?.trim();
+		if (!filePath) {
+			ctx.ui.notify("Usage: /plannotator-annotate <file.md | folder/> or /feedback-file <file.md | folder/>", "error");
+			return;
+		}
+		if (!hasPlanBrowserHtml()) {
+			ctx.ui.notify(
+				"Annotation UI not available. Run 'bun run build' in the pi-extension directory.",
+				"error",
+			);
+			return;
+		}
+
+		const { displayPath, absolutePath } = resolveMarkdownPath(ctx.cwd, filePath);
+		if (!existsSync(absolutePath)) {
+			ctx.ui.notify(`File not found: ${absolutePath}`, "error");
+			return;
+		}
+
+		// Check if the argument is a directory (folder annotation mode)
+		let isFolder = false;
+		try {
+			isFolder = statSync(absolutePath).isDirectory();
+		} catch {
+			ctx.ui.notify(`Cannot access: ${absolutePath}`, "error");
+			return;
+		}
+
+		let markdown: string;
+		let folderPath: string | undefined;
+		let mode: "annotate" | "annotate-folder" | undefined;
+
+		if (isFolder) {
+			if (!hasMarkdownFiles(absolutePath, FILE_BROWSER_EXCLUDED)) {
+				ctx.ui.notify(`No markdown files found in ${absolutePath}`, "error");
 				return;
 			}
+			markdown = "";
+			folderPath = absolutePath;
+			mode = "annotate-folder";
+			ctx.ui.notify(`Opening annotation UI for folder ${displayPath}... Press Esc in pi to stop waiting.`, "info");
+		} else {
+			markdown = readFileSync(absolutePath, "utf-8");
+			ctx.ui.notify(`Opening annotation UI for ${displayPath}... Press Esc in pi to stop waiting.`, "info");
+		}
 
-			ctx.ui.notify("Opening code review UI... Press Esc in pi to stop waiting.", "info");
-
-			try {
-				const prUrl = args?.trim() || undefined;
-				const isPRReview = prUrl?.startsWith("http://") || prUrl?.startsWith("https://");
-				const result = await openCodeReview(ctx, { prUrl });
-				if (result.feedback) {
-					if (result.approved) {
-						pi.sendUserMessage(
-							`# Code Review\n\nCode review completed — no changes requested.`,
-						);
-					} else if (isPRReview) {
-						// Platform PR actions (approve/comment) return approved:false with a
-						// status message — don't tell the agent to "address" a platform action.
-						pi.sendUserMessage(result.feedback);
-					} else {
-						pi.sendUserMessage(
-							`${result.feedback}\n\nPlease address this feedback.`,
-						);
-					}
-				} else {
-					ctx.ui.notify("Code review closed (no feedback).", "info");
-				}
-			} catch (err) {
-				ctx.ui.notify(
-					`Failed to start code review UI: ${getStartupErrorMessage(err)}`,
-					"error",
+		try {
+			const result = await openMarkdownAnnotation(ctx, absolutePath, markdown, mode ?? "annotate", folderPath);
+			if (result.feedback) {
+				const header = isFolder
+					? `# Markdown Annotations\n\nFolder: ${absolutePath}\n\n`
+					: `# Markdown Annotations\n\nFile: ${absolutePath}\n\n`;
+				pi.sendUserMessage(
+					`${header}${result.feedback}\n\nPlease address the annotation feedback above.`,
 				);
+			} else {
+				ctx.ui.notify("Annotation closed (no feedback).", "info");
 			}
-		},
+		} catch (err) {
+			ctx.ui.notify(
+				`Failed to start annotation UI: ${getStartupErrorMessage(err)}`,
+				"error",
+			);
+		}
+	};
+
+	const handleAnnotateLastCommand = async (
+		_args: string | undefined,
+		ctx: ExtensionContext,
+	): Promise<void> => {
+		if (!hasPlanBrowserHtml()) {
+			ctx.ui.notify(
+				"Annotation UI not available. Run 'bun run build' in the pi-extension directory.",
+				"error",
+			);
+			return;
+		}
+
+		const lastText = await getLastAssistantMessageText(ctx);
+		if (!lastText) {
+			ctx.ui.notify("No assistant message found in session.", "error");
+			return;
+		}
+
+		ctx.ui.notify("Opening annotation UI for last message... Press Esc in pi to stop waiting.", "info");
+
+		try {
+			const result = await openLastMessageAnnotation(ctx, lastText);
+			if (result.feedback) {
+				pi.sendUserMessage(
+					`# Message Annotations\n\n${result.feedback}\n\nPlease address the annotation feedback above.`,
+				);
+			} else {
+				ctx.ui.notify("Annotation closed (no feedback).", "info");
+			}
+		} catch (err) {
+			ctx.ui.notify(
+				`Failed to start annotation UI: ${getStartupErrorMessage(err)}`,
+				"error",
+			);
+		}
+	};
+
+	pi.registerCommand("plannotator-review", {
+		description: "Open interactive code review for current changes or a PR URL",
+		handler: handleReviewCommand,
+	});
+
+	pi.registerCommand("feedback-code", {
+		description: "Alias for /plannotator-review",
+		handler: handleReviewCommand,
 	});
 
 	pi.registerCommand("plannotator-annotate", {
 		description: "Open markdown file or folder in annotation UI",
-		handler: async (args, ctx) => {
-			const filePath = args?.trim();
-			if (!filePath) {
-				ctx.ui.notify("Usage: /plannotator-annotate <file.md | folder/>", "error");
-				return;
-			}
-			if (!hasPlanBrowserHtml()) {
-				ctx.ui.notify(
-					"Annotation UI not available. Run 'bun run build' in the pi-extension directory.",
-					"error",
-				);
-				return;
-			}
+		handler: handleAnnotateCommand,
+	});
 
-			const { displayPath, absolutePath } = resolveMarkdownPath(ctx.cwd, filePath);
-			if (!existsSync(absolutePath)) {
-				ctx.ui.notify(`File not found: ${absolutePath}`, "error");
-				return;
-			}
-
-			// Check if the argument is a directory (folder annotation mode)
-			let isFolder = false;
-			try {
-				isFolder = statSync(absolutePath).isDirectory();
-			} catch {
-				ctx.ui.notify(`Cannot access: ${absolutePath}`, "error");
-				return;
-			}
-
-			let markdown: string;
-			let folderPath: string | undefined;
-			let mode: "annotate" | "annotate-folder" | undefined;
-
-			if (isFolder) {
-				if (!hasMarkdownFiles(absolutePath, FILE_BROWSER_EXCLUDED)) {
-					ctx.ui.notify(`No markdown files found in ${absolutePath}`, "error");
-					return;
-				}
-				markdown = "";
-				folderPath = absolutePath;
-				mode = "annotate-folder";
-				ctx.ui.notify(`Opening annotation UI for folder ${displayPath}... Press Esc in pi to stop waiting.`, "info");
-			} else {
-				markdown = readFileSync(absolutePath, "utf-8");
-				ctx.ui.notify(`Opening annotation UI for ${displayPath}... Press Esc in pi to stop waiting.`, "info");
-			}
-
-			try {
-				const result = await openMarkdownAnnotation(ctx, absolutePath, markdown, mode ?? "annotate", folderPath);
-				if (result.feedback) {
-					const header = isFolder
-						? `# Markdown Annotations\n\nFolder: ${absolutePath}\n\n`
-						: `# Markdown Annotations\n\nFile: ${absolutePath}\n\n`;
-					pi.sendUserMessage(
-						`${header}${result.feedback}\n\nPlease address the annotation feedback above.`,
-					);
-				} else {
-					ctx.ui.notify("Annotation closed (no feedback).", "info");
-				}
-			} catch (err) {
-				ctx.ui.notify(
-					`Failed to start annotation UI: ${getStartupErrorMessage(err)}`,
-					"error",
-				);
-			}
-		},
+	pi.registerCommand("feedback-file", {
+		description: "Alias for /plannotator-annotate",
+		handler: handleAnnotateCommand,
 	});
 
 	pi.registerCommand("plannotator-last", {
 		description: "Annotate the last assistant message",
-		handler: async (_args, ctx) => {
-			if (!hasPlanBrowserHtml()) {
-				ctx.ui.notify(
-					"Annotation UI not available. Run 'bun run build' in the pi-extension directory.",
-					"error",
-				);
-				return;
-			}
+		handler: handleAnnotateLastCommand,
+	});
 
-			const lastText = await getLastAssistantMessageText(ctx);
-			if (!lastText) {
-				ctx.ui.notify("No assistant message found in session.", "error");
-				return;
-			}
-
-			ctx.ui.notify("Opening annotation UI for last message... Press Esc in pi to stop waiting.", "info");
-
-			try {
-				const result = await openLastMessageAnnotation(ctx, lastText);
-				if (result.feedback) {
-					pi.sendUserMessage(
-						`# Message Annotations\n\n${result.feedback}\n\nPlease address the annotation feedback above.`,
-					);
-				} else {
-					ctx.ui.notify("Annotation closed (no feedback).", "info");
-				}
-			} catch (err) {
-				ctx.ui.notify(
-					`Failed to start annotation UI: ${getStartupErrorMessage(err)}`,
-					"error",
-				);
-			}
-		},
+	pi.registerCommand("feedback-last", {
+		description: "Alias for /plannotator-last",
+		handler: handleAnnotateLastCommand,
 	});
 
 	pi.registerCommand("plannotator-archive", {
