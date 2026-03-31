@@ -160,6 +160,7 @@ const ReviewApp: React.FC = () => {
     }
   }, [diffFontFamily, diffFontSize]);
 
+  const [isFileTreeOpen, setIsFileTreeOpen] = useState(true);
   const [isPanelOpen, setIsPanelOpen] = useState(true);
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
   const [copyRawDiffStatus, setCopyRawDiffStatus] = useState<'idle' | 'success' | 'error'>('idle');
@@ -641,6 +642,7 @@ const ReviewApp: React.FC = () => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f' && !isTypingTarget(e.target)) {
         if (hasSearchableFiles) {
           e.preventDefault();
+          setIsFileTreeOpen(true);
           openSearch();
         }
         return;
@@ -1868,13 +1870,48 @@ const ReviewApp: React.FC = () => {
               onOpenExport={() => setShowExportModal(true)}
               appVersion={appVersion}
             />
+
+            {shouldShowFileTree && (
+              <button
+                onClick={() => setIsFileTreeOpen(!isFileTreeOpen)}
+                className={`p-1.5 rounded-md text-xs font-medium transition-all ${
+                  isFileTreeOpen
+                    ? 'bg-primary/15 text-primary'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                }`}
+                title={isFileTreeOpen ? 'Hide file browser' : 'Show file browser'}
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 7.5A1.5 1.5 0 014.5 6h4.379a1.5 1.5 0 011.06.44l.621.62a1.5 1.5 0 001.06.44H19.5A1.5 1.5 0 0121 9v9a1.5 1.5 0 01-1.5 1.5h-15A1.5 1.5 0 013 18V7.5z" />
+                </svg>
+              </button>
+            )}
+
+            <button
+              onClick={() => setIsPanelOpen(!isPanelOpen)}
+              className={`p-1.5 rounded-md text-xs font-medium transition-all relative ${
+                isPanelOpen
+                  ? 'bg-primary/15 text-primary'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+              }`}
+              title={isPanelOpen ? 'Hide annotations panel' : 'Show annotations panel'}
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+              </svg>
+              {totalAnnotationCount > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-3.5 h-3.5 px-0.5 rounded-full bg-primary text-primary-foreground text-[9px] leading-3.5 text-center">
+                  {totalAnnotationCount > 9 ? '9+' : totalAnnotationCount}
+                </span>
+              )}
+            </button>
           </div>
         </header>
 
         {/* Main content */}
         <div className={`flex-1 flex overflow-hidden ${isResizing ? 'select-none' : ''}`}>
-          {/* Left sidebar stays mounted whenever it provides navigation or context. */}
-          {shouldShowFileTree && (
+          {/* Left sidebar provides navigation and context when open. */}
+          {shouldShowFileTree && isFileTreeOpen && (
             <>
               <FileTree
                 files={files}
