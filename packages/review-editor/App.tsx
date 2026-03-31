@@ -143,6 +143,7 @@ const ReviewApp: React.FC = () => {
     }
   }, [diffFontFamily, diffFontSize]);
 
+  const [isFileTreeOpen, setIsFileTreeOpen] = useState(true);
   const [isPanelOpen, setIsPanelOpen] = useState(true);
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
   const [copyRawDiffStatus, setCopyRawDiffStatus] = useState<'idle' | 'success' | 'error'>('idle');
@@ -566,6 +567,7 @@ const ReviewApp: React.FC = () => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f' && !isTypingTarget(e.target)) {
         if (hasSearchableFiles) {
           e.preventDefault();
+          setIsFileTreeOpen(true);
           openSearch();
         }
         return;
@@ -1602,13 +1604,29 @@ const ReviewApp: React.FC = () => {
               onOpenExport={() => setShowExportModal(true)}
               appVersion={appVersion}
             />
+
+            {shouldShowFileTree && (
+              <button
+                onClick={() => setIsFileTreeOpen(!isFileTreeOpen)}
+                className={`p-1.5 rounded-md text-xs font-medium transition-all ${
+                  isFileTreeOpen
+                    ? 'bg-primary/15 text-primary'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                }`}
+                title={isFileTreeOpen ? 'Hide file browser' : 'Show file browser'}
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 7.5A1.5 1.5 0 014.5 6h4.379a1.5 1.5 0 011.06.44l.621.62a1.5 1.5 0 001.06.44H19.5A1.5 1.5 0 0121 9v9a1.5 1.5 0 01-1.5 1.5h-15A1.5 1.5 0 013 18V7.5z" />
+                </svg>
+              </button>
+            )}
           </div>
         </header>
 
         {/* Main content */}
         <div className={`flex-1 flex overflow-hidden ${isResizing ? 'select-none' : ''}`}>
-          {/* Left sidebar stays mounted whenever it provides navigation or context. */}
-          {shouldShowFileTree && (
+          {/* Left sidebar provides navigation and context when open. */}
+          {shouldShowFileTree && isFileTreeOpen && (
             <>
               <FileTree
                 files={files}
