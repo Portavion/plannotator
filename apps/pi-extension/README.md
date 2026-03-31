@@ -65,15 +65,15 @@ The agent iterates on the plan until you approve, then executes with full tool a
 
 ### Code review
 
-Run `/plannotator-review` to open your current git changes in the code review UI. Annotate specific lines, switch between diff views (uncommitted, staged, last commit, branch), and submit feedback that gets sent to the agent.
+Run `/plannotator-review` or `/feedback-code` to open your current git changes in the code review UI. Annotate specific lines, switch between diff views (uncommitted, staged, last commit, branch), and submit feedback that gets sent to the agent.
 
 ### Markdown annotation
 
-Run `/plannotator-annotate <file.md>` to open any markdown file in the annotation UI. Useful for reviewing documentation or design specs with the agent.
+Run `/plannotator-annotate <file.md>` or `/feedback-file <file.md>` to open any markdown file in the annotation UI. Useful for reviewing documentation or design specs with the agent.
 
 ### Annotate last message
 
-Run `/plannotator-last` to annotate the agent's most recent response. The message opens in the annotation UI where you can highlight text, add comments, and send structured feedback back to the agent.
+Run `/plannotator-last` or `/feedback-last` to annotate the agent's most recent response. The message opens in the annotation UI where you can highlight text, add comments, and send structured feedback back to the agent.
 
 ### Progress tracking
 
@@ -86,9 +86,9 @@ During execution, the agent marks completed steps with `[DONE:n]` markers. Progr
 | `/plannotator [path]` | Toggle plan mode. Accepts optional file path or prompts interactively |
 | `/plannotator-set-file <path>` | Change the plan file path mid-session |
 | `/plannotator-status` | Show current phase, plan file, and progress |
-| `/plannotator-review` | Open code review UI for current changes |
-| `/plannotator-annotate <file>` | Open markdown file in annotation UI |
-| `/plannotator-last` | Annotate the last assistant message |
+| `/plannotator-review` or `/feedback-code` | Open code review UI for current changes |
+| `/plannotator-annotate <file>` or `/feedback-file <file>` | Open markdown file in annotation UI |
+| `/plannotator-last` or `/feedback-last` | Annotate the last assistant message |
 
 ## Flags
 
