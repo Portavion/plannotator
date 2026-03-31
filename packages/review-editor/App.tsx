@@ -120,6 +120,7 @@ const ReviewApp: React.FC = () => {
     }
   }, [diffFontFamily, diffFontSize]);
 
+  const [isFileTreeOpen, setIsFileTreeOpen] = useState(true);
   const [isPanelOpen, setIsPanelOpen] = useState(true);
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
   const [viewedFiles, setViewedFiles] = useState<Set<string>>(new Set());
@@ -392,14 +393,16 @@ const ReviewApp: React.FC = () => {
     defaultWidth: 256, minWidth: 160, maxWidth: 400, side: 'left',
   });
   const isResizing = panelResize.isDragging || fileTreeResize.isDragging;
+  const hasFileTree = files.length > 1 || !!gitContext?.diffOptions;
 
   // Global keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Cmd/Ctrl+F to focus search (only when sidebar is rendered)
+      // Cmd/Ctrl+F to focus search in the file browser
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f' && !isTypingTarget(e.target)) {
-        if (files.length > 1 || gitContext?.diffOptions) {
+        if (hasFileTree) {
           e.preventDefault();
+          setIsFileTreeOpen(true);
           openSearch();
         }
         return;
@@ -432,7 +435,7 @@ const ReviewApp: React.FC = () => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showExportModal, showDestinationMenu, searchQuery, searchMatches, isSearchPending, openSearch, stepSearchMatch, clearSearch, files, gitContext?.diffOptions]);
+  }, [showExportModal, showDestinationMenu, searchQuery, searchMatches, isSearchPending, openSearch, stepSearchMatch, clearSearch, hasFileTree]);
 
   // Get annotations for active file
   const activeFileAnnotations = useMemo(() => {
@@ -1365,7 +1368,22 @@ const ReviewApp: React.FC = () => {
               gitUser={gitUser}
             />
 
-            {/* Panel toggle */}
+            {/* Sidebar toggles */}
+            {hasFileTree && (
+              <button
+                onClick={() => setIsFileTreeOpen(!isFileTreeOpen)}
+                className={`p-1.5 rounded-md text-xs font-medium transition-all ${
+                  isFileTreeOpen
+                    ? 'bg-primary/15 text-primary'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                }`}
+                title={isFileTreeOpen ? 'Hide file browser' : 'Show file browser'}
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 7.5A1.5 1.5 0 014.5 6h4.379a1.5 1.5 0 011.06.44l.621.62a1.5 1.5 0 001.06.44H19.5A1.5 1.5 0 0121 9v9a1.5 1.5 0 01-1.5 1.5h-15A1.5 1.5 0 013 18V7.5z" />
+                </svg>
+              </button>
+            )}
             <button
               onClick={() => setIsPanelOpen(!isPanelOpen)}
               className={`p-1.5 rounded-md text-xs font-medium transition-all ${
@@ -1373,7 +1391,7 @@ const ReviewApp: React.FC = () => {
                   ? 'bg-primary/15 text-primary'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted'
               }`}
-              title={isPanelOpen ? 'Hide annotations' : 'Show annotations'}
+              title={isPanelOpen ? 'Hide annotations side panel' : 'Show annotations side panel'}
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
@@ -1396,8 +1414,8 @@ const ReviewApp: React.FC = () => {
 
         {/* Main content */}
         <div className={`flex-1 flex overflow-hidden ${isResizing ? 'select-none' : ''}`}>
-          {/* File tree sidebar - show when multiple files OR diff options available */}
-          {(files.length > 1 || gitContext?.diffOptions) && (
+          {/* File tree sidebar */}
+          {hasFileTree && isFileTreeOpen && (
             <>
               <FileTree
                 files={files}
