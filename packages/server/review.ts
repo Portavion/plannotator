@@ -462,10 +462,13 @@ export async function startReviewServer(
               return Response.json(result);
             }
 
-            // PR mode: fetch from platform API using base/head SHAs
+            // PR mode: fetch from platform API using merge-base/head SHAs.
+            // The diff is computed against the merge-base (common ancestor), not the
+            // base branch tip. File contents must match the diff for hunk expansion.
             if (isPRMode) {
+              const oldSha = prMetadata.mergeBaseSha ?? prMetadata.baseSha;
               const [oldContent, newContent] = await Promise.all([
-                fetchPRFileContent(prRef!, prMetadata.baseSha, oldPath || filePath),
+                fetchPRFileContent(prRef!, oldSha, oldPath || filePath),
                 fetchPRFileContent(prRef!, prMetadata.headSha, filePath),
               ]);
               return Response.json({ oldContent, newContent });

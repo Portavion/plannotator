@@ -70,6 +70,8 @@ export interface GithubPRMetadata {
   headBranch: string;
   baseSha: string;
   headSha: string;
+  /** Merge-base SHA — the common ancestor commit used to compute the PR diff. Differs from baseSha when the base branch has moved. */
+  mergeBaseSha?: string;
   url: string;
 }
 

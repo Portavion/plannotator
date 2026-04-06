@@ -101,6 +101,21 @@ export async function fetchGhPR(
     url: string;
   };
 
+  // Fetch the merge-base SHA — the common ancestor commit GitHub uses to compute the PR diff.
+  // baseSha (baseRefOid) is the tip of the base branch, which may have moved since the branch point.
+  // File contents must be fetched at the merge-base to match the diff hunks.
+  let mergeBaseSha: string | undefined;
+  try {
+    const compareResult = await runtime.runCommand("gh", hostnameArgs(ref.host, [
+      "api",
+      `repos/${ref.owner}/${ref.repo}/compare/${raw.baseRefOid}...${raw.headRefOid}`,
+      "--jq", ".merge_base_commit.sha",
+    ]));
+    if (compareResult.exitCode === 0 && compareResult.stdout.trim()) {
+      mergeBaseSha = compareResult.stdout.trim();
+    }
+  } catch { /* fallback to baseSha if compare API fails */ }
+
   const metadata: PRMetadata = {
     platform: "github",
     host: ref.host,
@@ -114,6 +129,7 @@ export async function fetchGhPR(
     headBranch: raw.headRefName,
     baseSha: raw.baseRefOid,
     headSha: raw.headRefOid,
+    mergeBaseSha,
     url: raw.url,
   };
 

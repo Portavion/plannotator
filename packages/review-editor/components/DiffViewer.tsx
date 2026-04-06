@@ -279,11 +279,16 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
   // against the complete file (isPartial: false), enabling expansion.
   const augmentedDiff = useMemo(() => {
     if (!fileContents || fileContents.forPath !== filePath || (fileContents.old == null && fileContents.new == null)) return fileDiff;
-    const result = processFile(patch, {
-      oldFile: fileContents.old != null ? { name: oldPath || filePath, contents: fileContents.old } : undefined,
-      newFile: fileContents.new != null ? { name: filePath, contents: fileContents.new } : undefined,
-    });
-    return result || fileDiff;
+    try {
+      const result = processFile(patch, {
+        oldFile: fileContents.old != null ? { name: oldPath || filePath, contents: fileContents.old } : undefined,
+        newFile: fileContents.new != null ? { name: filePath, contents: fileContents.new } : undefined,
+      });
+      return result || fileDiff;
+    } catch {
+      // Fall back to partial diff if file contents don't match hunks
+      return fileDiff;
+    }
   }, [patch, filePath, oldPath, fileContents, fileDiff]);
 
   const previousScrollFilePathRef = useRef(filePath);
