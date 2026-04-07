@@ -551,7 +551,11 @@ export const Settings: React.FC<SettingsProps> = ({ taterMode, onTaterModeChange
   const [quickLabelsState, setQuickLabelsState] = useState<QuickLabel[]>([]);
   const [editingTipIndex, setEditingTipIndex] = useState<number | null>(null);
   const [editingTipValue, setEditingTipValue] = useState('');
-  const [showNewHints, setShowNewHints] = useState(() => hasNewSettings());
+  // Captured at mount so future hint markers (e.g. `{showNewHints && <Badge>}`)
+  // stay visible for the duration of the dialog session even after
+  // markNewSettingsSeen() runs on open. Bump CURRENT_HINT_VERSION in
+  // newSettingsHint.ts when adding new highlighted settings.
+  const [showNewHints] = useState(() => hasNewSettings());
   const [aiProvider, setAiProvider] = useState<string | null>(null);
   const [fileBrowserSettings, setFileBrowserSettings] = useState<FileBrowserSettings>({ enabled: false, directories: [] });
   const [newDirPath, setNewDirPath] = useState('');
@@ -758,12 +762,6 @@ export const Settings: React.FC<SettingsProps> = ({ taterMode, onTaterModeChange
           <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
           <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
         </svg>
-        {showNewHints && !showDialog && (
-          <span className="absolute top-0 right-0 flex h-2 w-2">
-            <span className="absolute inset-0 rounded-full bg-primary opacity-60 animate-[settings-ping_2s_cubic-bezier(0,0,0.2,1)_infinite]" />
-            <span className="relative rounded-full h-2 w-2 bg-primary" />
-          </span>
-        )}
       </button>
 
       {showDialog && createPortal(
@@ -802,9 +800,6 @@ export const Settings: React.FC<SettingsProps> = ({ taterMode, onTaterModeChange
                     }`}
                   >
                     {tab.label}
-                    {showNewHints && (tab.id === 'display' || tab.id === 'labels') && (
-                      <span className="text-[8px] font-semibold uppercase tracking-wide px-1 py-px rounded-full bg-primary/15 text-primary leading-none">new</span>
-                    )}
                   </button>
                 ))}
               </nav>
@@ -823,9 +818,6 @@ export const Settings: React.FC<SettingsProps> = ({ taterMode, onTaterModeChange
                       }`}
                     >
                       {tab.label}
-                      {showNewHints && (tab.id === 'display' || tab.id === 'labels') && (
-                        <span className="text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-primary/15 text-primary leading-none">new</span>
-                      )}
                     </button>
                   ))}
                 </div>
@@ -1112,7 +1104,7 @@ export const Settings: React.FC<SettingsProps> = ({ taterMode, onTaterModeChange
                     {/* Plan Width */}
                     <div className="space-y-3">
                       <div>
-                        <div className="text-sm font-medium flex items-center gap-2">Plan Width{showNewHints && <span className="text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-primary/15 text-primary leading-none">new</span>}</div>
+                        <div className="text-sm font-medium flex items-center gap-2">Plan Width</div>
                         <div className="text-xs text-muted-foreground">
                           Maximum width of the plan card
                         </div>
@@ -1368,7 +1360,7 @@ export const Settings: React.FC<SettingsProps> = ({ taterMode, onTaterModeChange
                   <>
                     <div className="flex items-center justify-between">
                       <div>
-                        <div className="text-sm font-medium flex items-center gap-2">Quick Labels{showNewHints && <span className="text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-primary/15 text-primary leading-none">new</span>}</div>
+                        <div className="text-sm font-medium flex items-center gap-2">Quick Labels</div>
                         <div className="text-xs text-muted-foreground">
                           Preset annotations for one-click feedback
                         </div>
