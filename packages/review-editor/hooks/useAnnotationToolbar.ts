@@ -46,6 +46,7 @@ interface Draft {
 
 const draftStore = new Map<string, Draft>();
 const restoreDraftKeyByFilePath = new Map<string, string>();
+const lineRangeAnchorByFilePath = new Map<string, { range: SelectedLineRange; createdAt: number }>();
 
 function draftKey(filePath: string, range: SelectedLineRange): string {
   const start = Math.min(range.start, range.end);
@@ -116,12 +117,14 @@ export function useAnnotationToolbar({ patch, filePath, isFocused, onLineSelecti
     return () => saveDraft();
   }, [saveDraft]);
 
-  // Clear token anchor on file switch
+  // Clear in-progress anchors on file switch
   useEffect(() => {
     tokenAnchorRef.current = null;
+    return () => lineRangeAnchorByFilePath.delete(filePath);
   }, [filePath]);
 
   const resetForm = useCallback(() => {
+    lineRangeAnchorByFilePath.delete(filePath);
     setToolbarState(null);
     setCommentText('');
     setSuggestedCode('');
@@ -131,7 +134,7 @@ export function useAnnotationToolbar({ patch, filePath, isFocused, onLineSelecti
     setEditingAnnotationId(null);
     setConventionalLabel(null);
     setDecorations([]);
-  }, []);
+  }, [filePath]);
 
   // Track mouse position continuously for toolbar placement
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
@@ -184,9 +187,21 @@ export function useAnnotationToolbar({ patch, filePath, isFocused, onLineSelecti
       return;
     }
 
+    let nextRange = range;
+    const isTouchDevice = window.matchMedia?.('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
+    const anchor = lineRangeAnchorByFilePath.get(filePath);
+    if (isTouchDevice && range.start === range.end) {
+      if (anchor && Date.now() - anchor.createdAt < 8000 && anchor.range.side === range.side && anchor.range.start !== range.start) {
+        nextRange = { start: anchor.range.start, end: range.start, side: range.side };
+        lineRangeAnchorByFilePath.delete(filePath);
+      } else {
+        lineRangeAnchorByFilePath.set(filePath, { range, createdAt: Date.now() });
+      }
+    }
+
     const mousePos = lastMousePosition.current;
-    openToolbar(range, { top: mousePos.y + 10, left: mousePos.x });
-  }, [onLineSelection, openToolbar]);
+    openToolbar(nextRange, { top: mousePos.y + 10, left: mousePos.x });
+  }, [filePath, onLineSelection, openToolbar]);
 
   // Handle annotation submission (create or update)
   const handleSubmitAnnotation = useCallback(() => {
@@ -327,13 +342,14 @@ export function useAnnotationToolbar({ patch, filePath, isFocused, onLineSelecti
       return;
     }
 
+    lineRangeAnchorByFilePath.delete(filePath);
     tokenAnchorRef.current = clickedToken;
     openToolbar(
       { start: clickedToken.lineNumber, end: clickedToken.lineNumber, side: clickedToken.side },
       { top: event.clientY + 10, left: event.clientX },
       { anchor: clickedToken, fullText: clickedToken.tokenText },
     );
-  }, [onLineSelection, openToolbar]);
+  }, [filePath, onLineSelection, openToolbar]);
 
   return {
     // State

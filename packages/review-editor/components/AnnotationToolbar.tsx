@@ -73,6 +73,7 @@ export const AnnotationToolbar: React.FC<AnnotationToolbarProps> = ({
   const handleTabIndent = useTabIndent(setSuggestedCode);
   const [askAIMode, setAskAIMode] = useState(false);
   const { dragPosition, dragHandleProps, wasDragged, reset: resetDrag } = useDraggable(toolbarRef);
+  const shouldAutoFocusInputs = !window.matchMedia?.('(pointer: coarse)').matches && navigator.maxTouchPoints === 0;
 
   // Reset drag when toolbar reopens for a new selection
   useEffect(() => {
@@ -164,7 +165,7 @@ export const AnnotationToolbar: React.FC<AnnotationToolbarProps> = ({
             placeholder="Leave feedback..."
             className="w-full px-3 py-2 bg-muted rounded-lg text-xs resize-none focus:outline-none focus:ring-1 focus:ring-primary/50"
             rows={3}
-            autoFocus
+            autoFocus={shouldAutoFocusInputs}
             onKeyDown={(e) => {
               if (e.key === 'Escape') {
                 onDismiss();
@@ -196,7 +197,7 @@ export const AnnotationToolbar: React.FC<AnnotationToolbarProps> = ({
                 placeholder="Enter code suggestion..."
                 className="suggested-code-input"
                 rows={4}
-                autoFocus
+                autoFocus={shouldAutoFocusInputs}
                 spellCheck={false}
                 onKeyDown={(e) => {
                   if (e.key === 'Tab') {
