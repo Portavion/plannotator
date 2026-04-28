@@ -58,7 +58,6 @@ import {
 import { useAgents } from '../hooks/useAgents';
 import { KeyboardShortcuts } from './KeyboardShortcuts';
 import { type QuickLabel, getQuickLabels, saveQuickLabels, resetQuickLabels, DEFAULT_QUICK_LABELS, getLabelColors, LABEL_COLOR_MAP } from '../utils/quickLabels';
-import { hasNewSettings, markNewSettingsSeen } from '../utils/newSettingsHint';
 import { ThemeTab } from './ThemeTab';
 import { isMac, modKey, altKey } from '../utils/platform';
 import { getAIProviderSettings } from '../utils/aiProvider';
@@ -595,11 +594,6 @@ export const Settings: React.FC<SettingsProps> = ({ taterMode, onTaterModeChange
   const [quickLabelsState, setQuickLabelsState] = useState<QuickLabel[]>([]);
   const [editingTipIndex, setEditingTipIndex] = useState<number | null>(null);
   const [editingTipValue, setEditingTipValue] = useState('');
-  // Captured at mount so future hint markers (e.g. `{showNewHints && <Badge>}`)
-  // stay visible for the duration of the dialog session even after
-  // markNewSettingsSeen() runs on open. Bump CURRENT_HINT_VERSION in
-  // newSettingsHint.ts when adding new highlighted settings.
-  const [showNewHints] = useState(() => hasNewSettings());
   const [aiProvider, setAiProvider] = useState<string | null>(null);
   const [fileBrowserSettings, setFileBrowserSettings] = useState<FileBrowserSettings>({ enabled: false, directories: [] });
   const [newDirPath, setNewDirPath] = useState('');
@@ -647,7 +641,6 @@ export const Settings: React.FC<SettingsProps> = ({ taterMode, onTaterModeChange
 
   useEffect(() => {
     if (showDialog) {
-      if (showNewHints) markNewSettingsSeen();
       setIdentity(getIdentity())
       setObsidian(getObsidianSettings());
       setBear(getBearSettings());
