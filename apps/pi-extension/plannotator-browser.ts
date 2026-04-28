@@ -82,11 +82,11 @@ export function getStartupErrorMessage(err: unknown): string {
 
 function openBrowserForServer(serverUrl: string, ctx: ExtensionContext): void {
 	const browserResult = openBrowser(serverUrl);
-	if (isRemoteSession()) {
-		ctx.ui.notify(`[Plannotator] ${serverUrl}`, "info");
-	} else if (!browserResult.opened) {
-		ctx.ui.notify(`Open this URL to review: ${serverUrl}`, "info");
+	if (isRemoteSession() || !browserResult.opened) {
+		ctx.ui.notify(`Open Plannotator review: ${serverUrl}`, "info");
+		return;
 	}
+	ctx.ui.notify(`Plannotator review opened: ${serverUrl}`, "info");
 }
 
 async function openBrowserAndWait<T>(

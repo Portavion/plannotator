@@ -64,6 +64,7 @@ export interface PlannotatorPlanReviewPayload {
 export interface PlannotatorPlanReviewStartResult {
 	status: "pending";
 	reviewId: string;
+	url: string;
 }
 
 export interface PlannotatorReviewResultEvent {
@@ -257,6 +258,7 @@ export function registerPlannotatorEventListeners(pi: ExtensionAPI): void {
 						result: {
 							status: "pending",
 							reviewId: session.reviewId,
+							url: session.url,
 						},
 					});
 					return;

@@ -426,7 +426,7 @@ export default function plannotator(pi: ExtensionAPI): void {
 				vcsType: reviewArgs.vcsType,
 				useLocal: reviewArgs.useLocal,
 			});
-			ctx.ui.notify("Code review opened. You can keep chatting while it runs.", "info");
+			ctx.ui.notify(`Code review opened: ${session.url}\nYou can keep chatting while it runs.`, "info");
 			void session
 				.waitForDecision()
 				.then((result) => {
@@ -607,7 +607,7 @@ export default function plannotator(pi: ExtensionAPI): void {
 				rawHtml,
 				renderHtmlFlag,
 			);
-			ctx.ui.notify("Annotation opened. You can keep chatting while it runs.", "info");
+			ctx.ui.notify(`Annotation opened: ${session.url}\nYou can keep chatting while it runs.`, "info");
 			void session
 				.waitForDecision()
 				.then((result) => {
