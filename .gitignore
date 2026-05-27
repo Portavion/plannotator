@@ -11,6 +11,8 @@ node_modules
 dist
 dist-ssr
 .astro
+.bun/
+.direnv/
 *.local
 
 # npm pack output
