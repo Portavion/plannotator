@@ -33,10 +33,22 @@ import {
 	warmFileListCache,
 } from "../generated/resolve-file.js";
 import { parseCodePath } from "../generated/code-file.js";
-import { htmlToMarkdown } from "../generated/html-to-markdown.js";
-import { preloadFile } from "@pierre/diffs/ssr";
 
 type Res = ServerResponse;
+
+async function convertHtmlToMarkdown(html: string): Promise<string> {
+	const { htmlToMarkdown } = await import("../generated/html-to-markdown.js");
+	return htmlToMarkdown(html);
+}
+
+async function preloadCodeFile(file: { name: string; contents: string }): Promise<string | undefined> {
+	const { preloadFile } = await import("@pierre/diffs/ssr");
+	const result = await preloadFile({
+		file,
+		options: { disableFileHeader: true },
+	});
+	return result.prerenderedHTML;
+}
 
 /** Recursively walk a directory collecting files by extension, skipping ignored dirs. */
 function walkMarkdownFiles(dir: string, root: string, results: string[], extensions: RegExp = /\.(mdx?|html?)$/i): void {
@@ -87,7 +99,7 @@ export async function handleDocRequest(res: Res, url: URL): Promise<void> {
 			if (existsSync(fromBase)) {
 				const raw = readFileSync(fromBase, "utf-8");
 				const isHtml = /\.html?$/i.test(requestedPath);
-				const markdown = isHtml ? htmlToMarkdown(raw) : raw;
+				const markdown = isHtml ? await convertHtmlToMarkdown(raw) : raw;
 				json(res, { markdown, filepath: fromBase, isConverted: isHtml });
 				return;
 			}
@@ -107,7 +119,7 @@ export async function handleDocRequest(res: Res, url: URL): Promise<void> {
 		try {
 			if (existsSync(resolvedHtml)) {
 				const html = readFileSync(resolvedHtml, "utf-8");
-				json(res, { markdown: htmlToMarkdown(html), filepath: resolvedHtml, isConverted: true });
+				json(res, { markdown: await convertHtmlToMarkdown(html), filepath: resolvedHtml, isConverted: true });
 				return;
 			}
 		} catch { /* fall through to 404 */ }
@@ -158,11 +170,7 @@ export async function handleDocRequest(res: Res, url: URL): Promise<void> {
 			const displayName = resolvedCode.split("/").pop() || resolvedCode;
 			let prerenderedHTML: string | undefined;
 			try {
-				const result = await preloadFile({
-					file: { name: displayName, contents },
-					options: { disableFileHeader: true },
-				});
-				prerenderedHTML = result.prerenderedHTML;
+				prerenderedHTML = await preloadCodeFile({ name: displayName, contents });
 			} catch {
 				// Fall back to client-side rendering
 			}

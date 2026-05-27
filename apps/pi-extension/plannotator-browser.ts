@@ -2,7 +2,7 @@ import { existsSync, readFileSync, realpathSync, rmSync, statSync } from "node:f
 import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
-import { createWorktreePool, type WorktreePool } from "./generated/worktree-pool.js";
+import { createWorktreePool, type WorktreePool } from "./generated/worktree-pool.ts";
 import { fileURLToPath } from "node:url";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import {
@@ -22,10 +22,10 @@ import {
 	getDisplayRepo,
 	getCliName,
 	getCliInstallUrl,
-} from "./generated/pr-provider.js";
-import { parseRemoteUrl } from "./generated/repo.js";
-import { fetchRef, createWorktree, removeWorktree, ensureObjectAvailable } from "./generated/worktree.js";
-import { loadConfig, resolveDefaultDiffType } from "./generated/config.js";
+} from "./generated/pr-provider.ts";
+import { parseRemoteUrl } from "./generated/repo.ts";
+import { fetchRef, createWorktree, removeWorktree, ensureObjectAvailable } from "./generated/worktree.ts";
+import { loadConfig, resolveDefaultDiffType } from "./generated/config.ts";
 export { getLastAssistantMessageText } from "./assistant-message.js";
 
 export type AnnotateMode = "annotate" | "annotate-folder" | "annotate-last";

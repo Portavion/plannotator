@@ -30,14 +30,12 @@ import {
 	type ChecklistItem,
 	markCompletedSteps,
 	parseChecklist,
-} from "./generated/checklist.js";
-import { hasMarkdownFiles, resolveUserPath } from "./generated/resolve-file.js";
-import { FILE_BROWSER_EXCLUDED } from "./generated/reference-common.js";
-import { htmlToMarkdown } from "./generated/html-to-markdown.js";
-import { urlToMarkdown, isConvertedSource } from "./generated/url-to-markdown.js";
-import { loadConfig, resolveUseJina } from "./generated/config.js";
-import { readImprovementHook } from "./generated/improvement-hooks.js";
-import { composeImproveContext } from "./generated/pfm-reminder.js";
+} from "./generated/checklist.ts";
+import { hasMarkdownFiles, resolveUserPath } from "./generated/resolve-file.ts";
+import { FILE_BROWSER_EXCLUDED } from "./generated/reference-common.ts";
+import { loadConfig, resolveUseJina } from "./generated/config.ts";
+import { readImprovementHook } from "./generated/improvement-hooks.ts";
+import { composeImproveContext } from "./generated/pfm-reminder.ts";
 import {
 	getReviewApprovedPrompt,
 	getReviewDeniedSuffix,
@@ -49,10 +47,10 @@ import {
 	buildPlanFileRule,
 	getAnnotateFileFeedbackPrompt,
 	getAnnotateMessageFeedbackPrompt,
-} from "./generated/prompts.js";
-import { parseAnnotateArgs } from "./generated/annotate-args.js";
-import { parseReviewArgs } from "./generated/review-args.js";
-import { resolveAtReference } from "./generated/at-reference.js";
+} from "./generated/prompts.ts";
+import { parseAnnotateArgs } from "./generated/annotate-args.ts";
+import { parseReviewArgs } from "./generated/review-args.ts";
+import { resolveAtReference } from "./generated/at-reference.ts";
 import {
 	hasPlanBrowserHtml,
 	hasReviewBrowserHtml,
@@ -100,6 +98,23 @@ type PersistedPlannotatorState = {
 	lastSubmittedPath?: string;
 	savedState?: SavedPhaseState;
 };
+
+async function convertHtmlToMarkdown(html: string): Promise<string> {
+	const { htmlToMarkdown } = await import("./generated/html-to-markdown.ts");
+	return htmlToMarkdown(html);
+}
+
+async function fetchUrlAsMarkdown(filePath: string, useJina: boolean): Promise<{
+	markdown: string;
+	sourceConverted: boolean;
+}> {
+	const { urlToMarkdown, isConvertedSource } = await import("./generated/url-to-markdown.ts");
+	const result = await urlToMarkdown(filePath, { useJina });
+	return {
+		markdown: result.markdown,
+		sourceConverted: isConvertedSource(result.source),
+	};
+}
 
 function getPlanReviewAvailabilityWarning(options: { hasUI: boolean; hasPlanHtml: boolean }): string | null {
 	const { hasUI, hasPlanHtml } = options;
@@ -527,9 +542,9 @@ export default function plannotator(pi: ExtensionAPI): void {
 			const useJina = resolveUseJina(false, loadConfig());
 			ctx.ui.notify(`Fetching: ${filePath}${useJina ? " (via Jina Reader)" : " (via fetch+Turndown)"}...`, "info");
 			try {
-				const result = await urlToMarkdown(filePath, { useJina });
+				const result = await fetchUrlAsMarkdown(filePath, useJina);
 				markdown = result.markdown;
-				sourceConverted = isConvertedSource(result.source);
+				sourceConverted = result.sourceConverted;
 			} catch (err) {
 				ctx.ui.notify(`Failed to fetch URL: ${err instanceof Error ? err.message : String(err)}`, "error");
 				return;
@@ -580,7 +595,7 @@ export default function plannotator(pi: ExtensionAPI): void {
 					rawHtml = html;
 					markdown = "";
 				} else {
-					markdown = htmlToMarkdown(html);
+					markdown = await convertHtmlToMarkdown(html);
 					sourceConverted = true;
 				}
 				sourceInfo = basename(absolutePath);

@@ -5,6 +5,11 @@
   "description": "Interactive Plan Review for Claude Code - annotate plans visually, share with team, automatically send feedback",
   "author": "backnotprop",
   "license": "MIT OR Apache-2.0",
+  "keywords": ["pi-package", "plannotator", "plan-review", "ai-agent", "coding-agent"],
+  "pi": {
+    "extensions": ["apps/pi-extension/index.ts"],
+    "skills": ["apps/skills"]
+  },
   "bin": {
     "plannotator": "bin/plannotator.js"
   },
@@ -32,6 +37,7 @@
     "dev:vscode": "bun run --cwd apps/vscode-extension watch",
     "build:vscode": "bun run --cwd apps/vscode-extension build",
     "package:vscode": "bun run --cwd apps/vscode-extension package",
+    "postinstall": "bash apps/pi-extension/vendor.sh",
     "test": "bun test",
     "typecheck": "bash apps/pi-extension/vendor.sh && tsc --noEmit -p packages/shared/tsconfig.json && tsc --noEmit -p packages/ai/tsconfig.json && tsc --noEmit -p packages/server/tsconfig.json && tsc --noEmit -p packages/ui/tsconfig.json && tsc --noEmit -p apps/pi-extension/tsconfig.json"
   },

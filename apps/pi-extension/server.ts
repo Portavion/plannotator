@@ -10,7 +10,7 @@ export type {
 	DiffOption,
 	DiffType,
 	GitContext,
-} from "./generated/review-core.js";
+} from "./generated/review-core.ts";
 export type { VcsSelection } from "./server/vcs.js";
 export {
 	type AnnotateServerResult,
